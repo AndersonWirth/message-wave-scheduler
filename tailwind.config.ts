@@ -1,3 +1,4 @@
+
 import type { Config } from "tailwindcss";
 
 export default {
@@ -61,6 +62,36 @@ export default {
 					'accent-foreground': 'hsl(var(--sidebar-accent-foreground))',
 					border: 'hsl(var(--sidebar-border))',
 					ring: 'hsl(var(--sidebar-ring))'
+				},
+				whatsapp: {
+					50: '#f0f9f5',
+					100: '#dcf2e6',
+					200: '#bce5d1',
+					300: '#8dd3b4',
+					400: '#57ba90',
+					500: '#25d366',
+					600: '#1da851',
+					700: '#1a8544',
+					800: '#1a6938',
+					900: '#18562f'
+				},
+				success: {
+					50: '#f0fdf4',
+					100: '#dcfce7',
+					500: '#22c55e',
+					600: '#16a34a'
+				},
+				warning: {
+					50: '#fffbeb',
+					100: '#fef3c7',
+					500: '#f59e0b',
+					600: '#d97706'
+				},
+				error: {
+					50: '#fef2f2',
+					100: '#fee2e2',
+					500: '#ef4444',
+					600: '#dc2626'
 				}
 			},
 			borderRadius: {
@@ -84,11 +115,50 @@ export default {
 					to: {
 						height: '0'
 					}
+				},
+				'fade-in': {
+					'0%': {
+						opacity: '0',
+						transform: 'translateY(10px)'
+					},
+					'100%': {
+						opacity: '1',
+						transform: 'translateY(0)'
+					}
+				},
+				'slide-in': {
+					'0%': {
+						transform: 'translateX(-100%)'
+					},
+					'100%': {
+						transform: 'translateX(0)'
+					}
+				},
+				'pulse-slow': {
+					'0%, 100%': {
+						opacity: '1'
+					},
+					'50%': {
+						opacity: '0.5'
+					}
 				}
 			},
 			animation: {
 				'accordion-down': 'accordion-down 0.2s ease-out',
-				'accordion-up': 'accordion-up 0.2s ease-out'
+				'accordion-up': 'accordion-up 0.2s ease-out',
+				'fade-in': 'fade-in 0.3s ease-out',
+				'slide-in': 'slide-in 0.3s ease-out',
+				'pulse-slow': 'pulse-slow 2s cubic-bezier(0.4, 0, 0.6, 1) infinite'
+			},
+			backgroundImage: {
+				'gradient-radial': 'radial-gradient(var(--tw-gradient-stops))',
+				'gradient-conic': 'conic-gradient(from 180deg at 50% 50%, var(--tw-gradient-stops))',
+				'whatsapp-gradient': 'linear-gradient(135deg, #25d366 0%, #1da851 100%)'
+			},
+			boxShadow: {
+				'soft': '0 2px 15px -3px rgba(0, 0, 0, 0.07), 0 10px 20px -2px rgba(0, 0, 0, 0.04)',
+				'medium': '0 4px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
+				'strong': '0 25px 50px -12px rgba(0, 0, 0, 0.25)'
 			}
 		}
 	},
