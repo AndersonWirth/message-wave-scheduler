@@ -1,15 +1,38 @@
 
 import React from 'react';
-import { MessageSquare, Smartphone, Calendar, Settings, BarChart3, Plus } from 'lucide-react';
+import { MessageSquare, Smartphone, Calendar, Settings, BarChart3, Plus, LogOut } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { supabase } from '@/integrations/supabase/client';
+import { User } from '@supabase/supabase-js';
+import { useToast } from '@/hooks/use-toast';
 
 interface LayoutProps {
   children: React.ReactNode;
   currentPage?: string;
   onPageChange?: (page: string) => void;
+  user: User;
 }
 
-const Layout = ({ children, currentPage = 'dashboard', onPageChange }: LayoutProps) => {
+const Layout = ({ children, currentPage = 'dashboard', onPageChange, user }: LayoutProps) => {
+  const { toast } = useToast();
+
+  const handleSignOut = async () => {
+    try {
+      const { error } = await supabase.auth.signOut();
+      if (error) throw error;
+      
+      toast({
+        title: "Logout realizado",
+        description: "Você foi desconectado com sucesso.",
+      });
+    } catch (error: any) {
+      toast({
+        title: "Erro no logout",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
+  };
   const navigation = [
     { id: 'dashboard', name: 'Dashboard', icon: BarChart3 },
     { id: 'devices', name: 'Dispositivos', icon: Smartphone },
@@ -35,6 +58,15 @@ const Layout = ({ children, currentPage = 'dashboard', onPageChange }: LayoutPro
             </div>
             
             <div className="flex items-center space-x-3">
+              <div className="text-right mr-4">
+                <p className="text-sm font-medium text-slate-900">
+                  {user.user_metadata?.full_name || user.email}
+                </p>
+                <p className="text-xs text-slate-500">
+                  {user.email}
+                </p>
+              </div>
+              
               <Button 
                 size="sm" 
                 className="bg-whatsapp-500 hover:bg-whatsapp-600 text-white shadow-md"
@@ -42,6 +74,14 @@ const Layout = ({ children, currentPage = 'dashboard', onPageChange }: LayoutPro
               >
                 <Plus className="w-4 h-4 mr-2" />
                 Nova Mensagem
+              </Button>
+              
+              <Button 
+                size="sm" 
+                variant="outline"
+                onClick={handleSignOut}
+              >
+                <LogOut className="w-4 h-4" />
               </Button>
             </div>
           </div>

@@ -1,5 +1,5 @@
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Smartphone, 
   MessageCircle, 
@@ -13,31 +13,124 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { supabase } from '@/integrations/supabase/client';
+import { useToast } from '@/hooks/use-toast';
 
 interface DashboardProps {
   onNavigate: (page: string) => void;
 }
 
+interface Device {
+  id: string;
+  name: string;
+  phone_number: string | null;
+  status: 'connected' | 'disconnected' | 'connecting';
+  last_seen: string | null;
+  created_at: string;
+}
+
+interface Message {
+  id: string;
+  content: string;
+  status: 'pending' | 'sent' | 'failed' | 'scheduled';
+  scheduled_for: string | null;
+  sent_at: string | null;
+  created_at: string;
+  device: {
+    name: string;
+  };
+  target_groups: string[];
+}
+
 const Dashboard = ({ onNavigate }: DashboardProps) => {
-  // Mock data
-  const stats = {
-    connectedDevices: 3,
-    totalMessages: 1247,
-    scheduledMessages: 8,
-    successRate: 98.5
+  const [devices, setDevices] = useState<Device[]>([]);
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [stats, setStats] = useState({
+    connectedDevices: 0,
+    totalMessages: 0,
+    scheduledMessages: 0,
+    successRate: 0
+  });
+  const [loading, setLoading] = useState(true);
+  const { toast } = useToast();
+
+  useEffect(() => {
+    fetchData();
+  }, []);
+
+  const fetchData = async () => {
+    try {
+      // Fetch devices
+      const { data: devicesData, error: devicesError } = await supabase
+        .from('devices')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(5);
+
+      if (devicesError) throw devicesError;
+
+      // Fetch messages with device names
+      const { data: messagesData, error: messagesError } = await supabase
+        .from('messages')
+        .select(`
+          *,
+          device:devices(name)
+        `)
+        .order('created_at', { ascending: false })
+        .limit(5);
+
+      if (messagesError) throw messagesError;
+
+      // Calculate stats
+      const connectedDevices = devicesData?.filter(d => d.status === 'connected').length || 0;
+      const totalMessages = messagesData?.filter(m => m.status === 'sent').length || 0;
+      const scheduledMessages = messagesData?.filter(m => m.status === 'scheduled').length || 0;
+      const successfulMessages = messagesData?.filter(m => m.status === 'sent').length || 0;
+      const failedMessages = messagesData?.filter(m => m.status === 'failed').length || 0;
+      const successRate = totalMessages > 0 ? (successfulMessages / (successfulMessages + failedMessages)) * 100 : 0;
+
+      setDevices((devicesData || []) as Device[]);
+      setMessages((messagesData || []) as Message[]);
+      setStats({
+        connectedDevices,
+        totalMessages,
+        scheduledMessages,
+        successRate: Math.round(successRate * 10) / 10
+      });
+    } catch (error: any) {
+      toast({
+        title: "Erro ao carregar dados",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const recentDevices = [
-    { id: 1, name: 'iPhone Principal', status: 'online', lastSeen: 'Agora' },
-    { id: 2, name: 'Android Vendas', status: 'online', lastSeen: '2 min atrás' },
-    { id: 3, name: 'Samsung Marketing', status: 'offline', lastSeen: '1 hora atrás' },
-  ];
+  const formatTimeAgo = (dateString: string | null) => {
+    if (!dateString) return 'Nunca';
+    
+    const date = new Date(dateString);
+    const now = new Date();
+    const diff = now.getTime() - date.getTime();
+    const minutes = Math.floor(diff / 60000);
+    const hours = Math.floor(diff / 3600000);
+    const days = Math.floor(diff / 86400000);
+    
+    if (minutes < 1) return 'Agora';
+    if (minutes < 60) return `${minutes} min atrás`;
+    if (hours < 24) return `${hours}h atrás`;
+    return `${days}d atrás`;
+  };
 
-  const recentMessages = [
-    { id: 1, device: 'iPhone Principal', groups: 5, status: 'sent', time: '14:30' },
-    { id: 2, device: 'Android Vendas', groups: 12, status: 'scheduled', time: '15:00' },
-    { id: 3, device: 'Samsung Marketing', groups: 3, status: 'failed', time: '13:45' },
-  ];
+  const formatTime = (dateString: string | null) => {
+    if (!dateString) return '';
+    return new Date(dateString).toLocaleTimeString('pt-BR', { 
+      hour: '2-digit', 
+      minute: '2-digit' 
+    });
+  };
 
   return (
     <div className="space-y-8 animate-fade-in">
@@ -121,30 +214,53 @@ const Dashboard = ({ onNavigate }: DashboardProps) => {
             </div>
           </CardHeader>
           <CardContent className="space-y-4">
-            {recentDevices.map((device) => (
-              <div key={device.id} className="flex items-center justify-between p-3 rounded-lg bg-slate-50 hover:bg-slate-100 transition-colors">
-                <div className="flex items-center space-x-3">
-                  <div className="relative">
-                    <Smartphone className="w-8 h-8 text-slate-600" />
-                    <div className={`absolute -top-1 -right-1 status-dot ${device.status}`}></div>
-                  </div>
-                  <div>
-                    <p className="font-medium text-slate-900">{device.name}</p>
-                    <p className="text-sm text-slate-500">{device.lastSeen}</p>
-                  </div>
-                </div>
-                <div className="flex items-center space-x-2">
-                  {device.status === 'online' ? (
-                    <Wifi className="w-4 h-4 text-green-500" />
-                  ) : (
-                    <WifiOff className="w-4 h-4 text-red-500" />
-                  )}
-                  <Badge variant={device.status === 'online' ? 'default' : 'secondary'} className="text-xs">
-                    {device.status === 'online' ? 'Online' : 'Offline'}
-                  </Badge>
-                </div>
+            {loading ? (
+              <div className="text-center py-8">
+                <p className="text-slate-500">Carregando dispositivos...</p>
               </div>
-            ))}
+            ) : devices.length === 0 ? (
+              <div className="text-center py-8">
+                <Smartphone className="w-12 h-12 text-slate-300 mx-auto mb-4" />
+                <p className="text-slate-500 mb-2">Nenhum dispositivo conectado</p>
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  onClick={() => onNavigate('devices')}
+                >
+                  Conectar primeiro dispositivo
+                </Button>
+              </div>
+            ) : (
+              devices.map((device) => (
+                <div key={device.id} className="flex items-center justify-between p-3 rounded-lg bg-slate-50 hover:bg-slate-100 transition-colors">
+                  <div className="flex items-center space-x-3">
+                    <div className="relative">
+                      <Smartphone className="w-8 h-8 text-slate-600" />
+                      <div className={`absolute -top-1 -right-1 w-3 h-3 rounded-full ${
+                        device.status === 'connected' ? 'bg-green-500' :
+                        device.status === 'connecting' ? 'bg-orange-500' : 
+                        'bg-red-500'
+                      }`}></div>
+                    </div>
+                    <div>
+                      <p className="font-medium text-slate-900">{device.name}</p>
+                      <p className="text-sm text-slate-500">{formatTimeAgo(device.last_seen)}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    {device.status === 'connected' ? (
+                      <Wifi className="w-4 h-4 text-green-500" />
+                    ) : (
+                      <WifiOff className="w-4 h-4 text-red-500" />
+                    )}
+                    <Badge variant={device.status === 'connected' ? 'default' : 'secondary'} className="text-xs">
+                      {device.status === 'connected' ? 'Online' : 
+                       device.status === 'connecting' ? 'Conectando' : 'Offline'}
+                    </Badge>
+                  </div>
+                </div>
+              ))
+            )}
           </CardContent>
         </Card>
 
@@ -164,31 +280,61 @@ const Dashboard = ({ onNavigate }: DashboardProps) => {
             </div>
           </CardHeader>
           <CardContent className="space-y-4">
-            {recentMessages.map((message) => (
-              <div key={message.id} className="flex items-center justify-between p-3 rounded-lg bg-slate-50 hover:bg-slate-100 transition-colors">
-                <div className="flex items-center space-x-3">
-                  <div className={`w-3 h-3 rounded-full ${
-                    message.status === 'sent' ? 'bg-green-500' :
-                    message.status === 'scheduled' ? 'bg-orange-500' : 
-                    'bg-red-500'
-                  }`} />
-                  <div>
-                    <p className="font-medium text-slate-900">{message.device}</p>
-                    <p className="text-sm text-slate-500">{message.groups} grupos</p>
+            {loading ? (
+              <div className="text-center py-8">
+                <p className="text-slate-500">Carregando atividades...</p>
+              </div>
+            ) : messages.length === 0 ? (
+              <div className="text-center py-8">
+                <MessageCircle className="w-12 h-12 text-slate-300 mx-auto mb-4" />
+                <p className="text-slate-500 mb-2">Nenhuma mensagem ainda</p>
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  onClick={() => onNavigate('messages')}
+                >
+                  Enviar primeira mensagem
+                </Button>
+              </div>
+            ) : (
+              messages.map((message) => (
+                <div key={message.id} className="flex items-center justify-between p-3 rounded-lg bg-slate-50 hover:bg-slate-100 transition-colors">
+                  <div className="flex items-center space-x-3">
+                    <div className={`w-3 h-3 rounded-full ${
+                      message.status === 'sent' ? 'bg-green-500' :
+                      message.status === 'scheduled' ? 'bg-orange-500' :
+                      message.status === 'pending' ? 'bg-blue-500' :
+                      'bg-red-500'
+                    }`} />
+                    <div>
+                      <p className="font-medium text-slate-900">{message.device?.name || 'Dispositivo desconhecido'}</p>
+                      <p className="text-sm text-slate-500">{message.target_groups.length} grupos</p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <Badge 
+                      variant={
+                        message.status === 'sent' ? 'default' : 
+                        message.status === 'scheduled' ? 'secondary' : 
+                        message.status === 'pending' ? 'outline' :
+                        'destructive'
+                      }
+                      className="mb-1"
+                    >
+                      {message.status === 'sent' ? 'Enviada' : 
+                       message.status === 'scheduled' ? 'Agendada' :
+                       message.status === 'pending' ? 'Pendente' : 
+                       'Falha'}
+                    </Badge>
+                    <p className="text-sm text-slate-500">
+                      {message.status === 'sent' ? formatTime(message.sent_at) :
+                       message.status === 'scheduled' ? formatTime(message.scheduled_for) :
+                       formatTime(message.created_at)}
+                    </p>
                   </div>
                 </div>
-                <div className="text-right">
-                  <Badge 
-                    variant={message.status === 'sent' ? 'default' : message.status === 'scheduled' ? 'secondary' : 'destructive'}
-                    className="mb-1"
-                  >
-                    {message.status === 'sent' ? 'Enviada' : 
-                     message.status === 'scheduled' ? 'Agendada' : 'Falha'}
-                  </Badge>
-                  <p className="text-sm text-slate-500">{message.time}</p>
-                </div>
-              </div>
-            ))}
+              ))
+            )}
           </CardContent>
         </Card>
       </div>
