@@ -20,6 +20,7 @@ import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { useWhatsAppManager } from '@/hooks/useWhatsAppManager';
 
 interface Device {
   id: string;
@@ -37,10 +38,46 @@ const DeviceManager = () => {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [deviceName, setDeviceName] = useState('');
   const [addingDevice, setAddingDevice] = useState(false);
+  const [generatingQR, setGeneratingQR] = useState<string | null>(null);
   const { toast } = useToast();
+  const { generateQRCode, disconnectDevice, isLoading } = useWhatsAppManager();
 
   useEffect(() => {
     fetchDevices();
+    
+    // Subscribe to real-time updates
+    const channel = supabase
+      .channel('devices-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'devices'
+        },
+        (payload) => {
+          console.log('Device update:', payload);
+          
+          if (payload.eventType === 'UPDATE') {
+            setDevices(prev => 
+              prev.map(device => 
+                device.id === payload.new.id 
+                  ? { ...device, ...payload.new } as Device
+                  : device
+              )
+            );
+          } else if (payload.eventType === 'INSERT') {
+            setDevices(prev => [payload.new as Device, ...prev]);
+          } else if (payload.eventType === 'DELETE') {
+            setDevices(prev => prev.filter(device => device.id !== payload.old.id));
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   const fetchDevices = async () => {
@@ -85,9 +122,12 @@ const DeviceManager = () => {
 
       if (error) throw error;
 
+      // Automatically start QR generation
+      await handleGenerateQR(data.id);
+
       toast({
         title: "Dispositivo adicionado",
-        description: "Use o QR Code para conectar o dispositivo.",
+        description: "Gerando QR Code para conexão...",
       });
 
       setDevices([data as Device, ...devices]);
@@ -106,6 +146,9 @@ const DeviceManager = () => {
 
   const handleDeleteDevice = async (deviceId: string) => {
     try {
+      // Disconnect from WhatsApp first
+      await disconnectDevice(deviceId);
+      
       const { error } = await supabase
         .from('devices')
         .delete()
@@ -128,8 +171,32 @@ const DeviceManager = () => {
     }
   };
 
+  const handleGenerateQR = async (deviceId: string) => {
+    setGeneratingQR(deviceId);
+    try {
+      await generateQRCode(deviceId);
+      
+      toast({
+        title: "QR Code em geração",
+        description: "O QR Code será exibido em alguns segundos.",
+      });
+    } catch (error: any) {
+      toast({
+        title: "Erro ao gerar QR Code",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setGeneratingQR(null);
+    }
+  };
+
   const handleRefreshDevice = async (deviceId: string) => {
     try {
+      // First disconnect if connected
+      await disconnectDevice(deviceId);
+      
+      // Update status to connecting
       const { data, error } = await supabase
         .from('devices')
         .update({ qr_code: 'pending', status: 'connecting' })
@@ -141,10 +208,8 @@ const DeviceManager = () => {
 
       setDevices(devices.map(d => d.id === deviceId ? data as Device : d));
       
-      toast({
-        title: "QR Code renovado",
-        description: "Um novo QR Code foi gerado para conexão.",
-      });
+      // Generate new QR code
+      await handleGenerateQR(deviceId);
     } catch (error: any) {
       toast({
         title: "Erro ao renovar QR Code",
@@ -329,8 +394,13 @@ const DeviceManager = () => {
                       size="sm" 
                       variant="outline"
                       onClick={() => handleRefreshDevice(device.id)}
+                      disabled={generatingQR === device.id || isLoading}
                     >
-                      <RefreshCw className="w-4 h-4 mr-2" />
+                      {generatingQR === device.id ? (
+                        <Loader className="w-4 h-4 mr-2 animate-spin" />
+                      ) : (
+                        <RefreshCw className="w-4 h-4 mr-2" />
+                      )}
                       Reconectar
                     </Button>
                   )}
@@ -353,16 +423,18 @@ const DeviceManager = () => {
                       <QrCode className="w-5 h-5 text-slate-600" />
                       <span className="font-medium text-slate-900">Escaneie para conectar</span>
                     </div>
-                    {device.qr_code === 'pending' ? (
+                    {device.qr_code === 'pending' || generatingQR === device.id ? (
                       <div className="bg-white p-8 rounded-lg text-center">
                         <Loader className="w-8 h-8 animate-spin mx-auto mb-2 text-whatsapp-500" />
                         <p className="text-sm text-slate-500">Gerando QR Code...</p>
                       </div>
                     ) : (
                       <div className="bg-white p-3 rounded-lg inline-block">
-                        <div className="w-32 h-32 bg-slate-200 rounded flex items-center justify-center">
-                          <QrCode className="w-16 h-16 text-slate-400" />
-                        </div>
+                        <img 
+                          src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(device.qr_code)}`}
+                          alt="QR Code WhatsApp"
+                          className="w-32 h-32 rounded"
+                        />
                       </div>
                     )}
                     <p className="text-xs text-slate-500 mt-2">
